@@ -289,6 +289,27 @@
         .btn-secondary:hover { background: #475569; }
         .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.75rem; }
 
+        /* PEDIDOS DO SITE */
+        .nav-badge { margin-left: auto; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--accent-cyan); color: #070d18; font-size: 0.72rem; font-weight: 800; display: grid; place-items: center; box-shadow: 0 0 10px rgba(0,242,254,.6); }
+        .nav-badge:empty { display: none; }
+        .ped-filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .ped-filtros button { background: #09101d; border: 1px solid var(--border); color: var(--text-muted); padding: 6px 12px; border-radius: 999px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
+        .ped-filtros button.ativo { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(0,242,254,.08); }
+        .ped-status { border-radius: 12px; padding: 3px 10px; font-size: 0.72rem; font-weight: 800; border: 1px solid; white-space: nowrap; }
+        .ped-NOVO { color: var(--accent-cyan); background: rgba(0,242,254,.12); border-color: rgba(0,242,254,.35); }
+        .ped-PAGO { color: var(--success); background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.35); }
+        .ped-PRONTO { color: #a78bfa; background: rgba(167,139,250,.12); border-color: rgba(167,139,250,.35); }
+        .ped-ENTREGUE { color: var(--text-muted); background: rgba(148,163,184,.1); border-color: rgba(148,163,184,.3); }
+        .ped-CANCELADO { color: var(--danger); background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.3); }
+        tr.ped-novo-chegou td { animation: pedChegou 2.4s ease; }
+        @keyframes pedChegou { 0%, 40% { background: rgba(0,242,254,.18); } 100% { background: transparent; } }
+        .ped-itens { text-align: left; font-size: 0.8rem; line-height: 1.45; }
+        .ped-acoes { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+        .ped-cliente { text-align: left; }
+        .ped-cliente small { color: var(--text-muted); display: block; }
+        .ped-cliente a { color: var(--success); text-decoration: none; font-weight: 600; }
+        .ped-aviso { font-size: 0.85rem; color: var(--text-muted); text-align: left; }
+
         /* MODAIS DE EDIÇÃO / CONFIRMAÇÃO */
         .modal-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 9999; }
         .modal-bg.active { display: flex; }
@@ -479,6 +500,7 @@
                 <button id="nav-cadastros" onclick="showMainTab('cadastros', this)"><i class="fa-solid fa-address-book"></i> Cadastros</button>
                 <button id="nav-inventario" onclick="showMainTab('inventario', this)"><i class="fa-solid fa-boxes-stacked"></i> Inventário</button>
                 <button id="nav-vendas" onclick="showMainTab('vendas', this)"><i class="fa-solid fa-cart-shopping"></i> Vendas</button>
+                <button id="nav-pedidos" onclick="showMainTab('pedidos', this); carregarPedidosSite(true)"><i class="fa-solid fa-bag-shopping"></i> Pedidos do site <span class="nav-badge" id="badge-pedidos"></span></button>
                 <button id="nav-relatorios" onclick="showMainTab('relatorios', this)"><i class="fa-solid fa-chart-line"></i> Relatórios</button>
             </aside>
 
@@ -837,6 +859,51 @@
                                 </tr>
                             </thead>
                             <tbody id="tb-vendas"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ================= PEDIDOS DO SITE (vêm do carrinho da loja online) ================= -->
+                <div id="page-pedidos" class="tab-content">
+                    <div class="page-title">
+                        <span><i class="fa-solid fa-bag-shopping"></i> Pedidos do site</span>
+                        <button class="btn btn-secondary" onclick="carregarPedidosSite(true)"><i class="fa-solid fa-rotate"></i> Atualizar</button>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                        <div class="detail-box"><h4 style="border:none;"><i class="fa-solid fa-bell text-cyan"></i> Novos (aguardando)</h4><h2 id="kpi-ped-novos" style="color:var(--accent-cyan); font-size: 2rem;">0</h2></div>
+                        <div class="detail-box"><h4 style="border:none;"><i class="fa-solid fa-circle-check"></i> Pagos / prontos</h4><h2 id="kpi-ped-pagos" style="color:var(--success); font-size: 2rem;">0</h2></div>
+                        <div class="detail-box"><h4 style="border:none;"><i class="fa-solid fa-sack-dollar"></i> Valor confirmado</h4><h2 id="kpi-ped-valor" style="color:var(--success); font-size: 2rem;">R$ 0,00</h2></div>
+                    </div>
+
+                    <div class="table-container">
+                        <h4>
+                            <span>Pedidos recebidos <small id="ped-atualizado" style="color:var(--text-muted); font-weight:normal;"></small></span>
+                            <span class="ped-filtros" id="ped-filtros">
+                                <button data-f="ABERTOS" class="ativo">Em aberto</button>
+                                <button data-f="NOVO">Novos</button>
+                                <button data-f="PAGO">Pagos</button>
+                                <button data-f="PRONTO">Prontos</button>
+                                <button data-f="ENTREGUE">Entregues</button>
+                                <button data-f="CANCELADO">Cancelados</button>
+                                <button data-f="TODOS">Todos</button>
+                            </span>
+                        </h4>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Nº</th>
+                                    <th>Data</th>
+                                    <th>Cliente</th>
+                                    <th>Itens</th>
+                                    <th>Entrega</th>
+                                    <th>Pagamento</th>
+                                    <th>Total</th>
+                                    <th>Situação</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tb-pedidos-site"><tr><td colspan="9" class="ped-aviso">Entre com o login do Supabase para ver os pedidos do site.</td></tr></tbody>
                         </table>
                     </div>
                 </div>
@@ -1299,6 +1366,15 @@
             'box-archive': '<rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/>',
             'box-open': '<rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9"/><path d="M12 18v-6M9.5 14.5 12 12l2.5 2.5"/>',
             'file-lines': '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h6"/>',
+            'bag-shopping': '<path d="M5 8h14l-1 13H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
+            'rotate': '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>',
+            'rotate-left': '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+            'bell': '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>',
+            'check': '<path d="m5 12 5 5 9-10"/>',
+            'xmark': '<path d="M6 6l12 12M18 6 6 18"/>',
+            'box': '<path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/>',
+            'handshake': '<path d="M2 12l4-4 4 2 4-3 4 1 4 4"/><path d="M6 8v6l5 5 2-1 4-4"/><path d="M11 13l2 2"/>',
+            'whatsapp': '<path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3.5 21l1.6-4.7A8.5 8.5 0 1 1 21 12Z"/><path d="M9 9.5c.3 2 2 4 4.5 4.8l1.2-1.2 1.8.8"/>',
             'camera': '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>'
         };
 
@@ -1509,6 +1585,8 @@
             const navInventario = document.getElementById('nav-inventario');
             const navVendas = document.getElementById('nav-vendas');
             const navRelatorios = document.getElementById('nav-relatorios');
+            const navPedidos = document.getElementById('nav-pedidos');
+            navPedidos.classList.toggle('rbac-hidden', cargo === 'OPTOMETRISTA');
 
             const btnSubFunc = document.getElementById('subtab-btn-funcionarios');
             const btnSubForn = document.getElementById('subtab-btn-fornecedores');
@@ -3307,6 +3385,7 @@
                 if (!r.ok) throw new Error('login recusado (' + r.status + ')');
                 sbSessao = await r.json();
                 logSQL('-- SUPABASE: conectado como ' + email);
+                iniciarPedidosSite();
                 await baixarProdutosSupabase();
                 return true;
             } catch (e) {
@@ -3330,6 +3409,7 @@
             sbSessao = null;
             sbUltimoEnviado = new Map();
             clearTimeout(sbTimer);
+            pararPedidosSite();
         }
 
         async function baixarProdutosSupabase() {
@@ -3406,6 +3486,187 @@
             } finally {
                 sbOcupado = false;
                 if (sbPendente) { sbPendente = false; agendarSyncSupabase(); }
+            }
+        }
+
+        /* =====================================================================
+           PEDIDOS DO SITE
+           ---------------------------------------------------------------------
+           Quando o cliente toca em "Finalizar pedido" no site, o pedido é gravado
+           na tabela "pedidos" do Supabase (sem depender do WhatsApp).
+           Esta aba lê essa tabela a cada 20 segundos enquanto o painel está aberto:
+             • pedido novo  -> aviso na tela, som e número no menu lateral
+             • você muda a situação: Novo -> Pago -> Pronto -> Entregue (ou Cancelado)
+           Precisa do arquivo SQL "3-pedidos-no-painel.sql" (permissões de leitura).
+           ===================================================================== */
+        const PED_INTERVALO = 20000;
+        const PED_SITUACOES = { NOVO: 'Novo', PAGO: 'Pago', PRONTO: 'Pronto', ENTREGUE: 'Entregue', CANCELADO: 'Cancelado' };
+        const PED_PAGTO = { PIX: 'Pix', CREDITO: 'Crédito', DEBITO: 'Débito', DINHEIRO: 'Dinheiro' };
+        let pedidosSite = [], pedTimer = null, pedIdsConhecidos = null, pedFiltro = 'ABERTOS', pedIdsRecentes = new Set();
+
+        // A tabela pode ter nomes de coluna um pouco diferentes; pega o primeiro que existir
+        const pedCampo = (p, nomes) => { for (const n of nomes) if (p[n] !== undefined && p[n] !== null && p[n] !== '') return p[n]; return ''; };
+        function pedNormalizar(p) {
+            let itens = pedCampo(p, ['itens', 'items', 'produtos']);
+            if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch (e) { itens = []; } }
+            const st = String(pedCampo(p, ['status', 'situacao']) || 'NOVO').toUpperCase();
+            return {
+                bruto: p,
+                id: pedCampo(p, ['id', 'numero']),
+                data: pedCampo(p, ['criado_em', 'created_at', 'data_pedido', 'data']),
+                nome: pedCampo(p, ['cliente_nome', 'nome_cliente', 'nome']),
+                tel: String(pedCampo(p, ['cliente_telefone', 'telefone', 'whatsapp'])),
+                entrega: String(pedCampo(p, ['entrega', 'tipo_entrega'])).toUpperCase(),
+                endereco: pedCampo(p, ['endereco', 'endereco_entrega']),
+                pagto: String(pedCampo(p, ['forma_pagto', 'forma_pagamento', 'pagamento'])).toUpperCase(),
+                parcelas: Number(pedCampo(p, ['parcelas'])) || 1,
+                troco: pedCampo(p, ['troco_para', 'troco']),
+                obs: pedCampo(p, ['observacao', 'obs']),
+                itens: Array.isArray(itens) ? itens : [],
+                total: Number(pedCampo(p, ['total', 'valor_total'])) || 0,
+                status: PED_SITUACOES[st] ? st : 'NOVO',          // NOVO, PENDENTE, AGUARDANDO... = Novo
+                colunaStatus: p.situacao !== undefined && p.status === undefined ? 'situacao' : 'status'
+            };
+        }
+
+        function iniciarPedidosSite() {
+            pararPedidosSite();
+            pedIdsConhecidos = null;          // primeira leitura não dispara aviso
+            carregarPedidosSite();
+            pedTimer = setInterval(carregarPedidosSite, PED_INTERVALO);
+            document.getElementById('ped-filtros').onclick = e => {
+                const b = e.target.closest('button'); if (!b) return;
+                pedFiltro = b.dataset.f;
+                document.querySelectorAll('#ped-filtros button').forEach(x => x.classList.toggle('ativo', x === b));
+                desenharPedidosSite();
+            };
+        }
+        function pararPedidosSite() {
+            clearInterval(pedTimer); pedTimer = null;
+        }
+
+        async function carregarPedidosSite(manual) {
+            if (!sbSessao) {
+                if (manual) showToast('Entre com o login do Supabase para ver os pedidos do site.', 'warning');
+                return;
+            }
+            try {
+                const r = await sbFetch('/rest/v1/pedidos?select=*&order=id.desc&limit=300');
+                const lista = (await r.json()).map(pedNormalizar);
+                const novosAgora = pedIdsConhecidos ? lista.filter(p => !pedIdsConhecidos.has(String(p.id))) : [];
+                pedIdsConhecidos = new Set(lista.map(p => String(p.id)));
+                pedidosSite = lista;
+                if (novosAgora.length) avisarPedidoNovo(novosAgora);
+                desenharPedidosSite();
+                document.getElementById('ped-atualizado').textContent = '· atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            } catch (e) {
+                console.error(e);
+                const semPermissao = /\b(401|403|42501)\b|permission/i.test(e.message);
+                document.getElementById('tb-pedidos-site').innerHTML = `<tr><td colspan="9" class="ped-aviso">${semPermissao
+                    ? 'O banco não liberou a leitura dos pedidos. Rode o arquivo <b>3-pedidos-no-painel.sql</b> no SQL Editor do Supabase.'
+                    : 'Não foi possível carregar os pedidos agora (' + escHtml(e.message.slice(0, 140)) + ').'}</td></tr>`;
+                if (manual) showToast('Não foi possível carregar os pedidos do site.', 'danger');
+            }
+        }
+
+        function avisarPedidoNovo(novos) {
+            novos.forEach(p => pedIdsRecentes.add(String(p.id)));
+            const p = novos[0];
+            showToast(novos.length > 1 ? `${novos.length} pedidos novos chegaram pelo site!` : `Novo pedido nº ${p.id} pelo site: ${brl(p.total)} (${p.nome || 'cliente'})`);
+            logSQL(`-- SITE: ${novos.length} pedido(s) novo(s) recebido(s)`);
+            tocarSomPedido();
+            piscarTitulo(novos.length);
+        }
+
+        function tocarSomPedido() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                [0, 0.18].forEach((t, i) => {
+                    const o = ctx.createOscillator(), g = ctx.createGain();
+                    o.frequency.value = i ? 1046 : 784; o.type = 'sine';
+                    g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+                    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + t + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.35);
+                    o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.4);
+                });
+            } catch (e) { /* navegador sem som */ }
+        }
+
+        let tituloOriginal = document.title, tituloTimer = null;
+        function piscarTitulo(n) {
+            clearInterval(tituloTimer);
+            let liga = false;
+            tituloTimer = setInterval(() => { document.title = (liga = !liga) ? `(${n}) Novo pedido!` : tituloOriginal; }, 1000);
+            const parar = () => { clearInterval(tituloTimer); document.title = tituloOriginal; window.removeEventListener('focus', parar); document.removeEventListener('click', parar); };
+            window.addEventListener('focus', parar); document.addEventListener('click', parar);
+        }
+
+        function desenharPedidosSite() {
+            const abertos = ['NOVO', 'PAGO', 'PRONTO'];
+            const novos = pedidosSite.filter(p => p.status === 'NOVO');
+            const confirmados = pedidosSite.filter(p => ['PAGO', 'PRONTO', 'ENTREGUE'].includes(p.status));
+            document.getElementById('badge-pedidos').textContent = novos.length || '';
+            document.getElementById('kpi-ped-novos').textContent = novos.length;
+            document.getElementById('kpi-ped-pagos').textContent = pedidosSite.filter(p => ['PAGO', 'PRONTO'].includes(p.status)).length;
+            document.getElementById('kpi-ped-valor').textContent = brl(confirmados.reduce((s, p) => s + p.total, 0));
+
+            const lista = pedidosSite.filter(p => pedFiltro === 'TODOS' ? true : pedFiltro === 'ABERTOS' ? abertos.includes(p.status) : p.status === pedFiltro);
+            const tb = document.getElementById('tb-pedidos-site');
+            if (!lista.length) {
+                tb.innerHTML = `<tr><td colspan="9" class="ped-aviso">${pedidosSite.length ? 'Nenhum pedido nesta situação.' : 'Nenhum pedido do site ainda. Quando um cliente finalizar uma compra, ele aparece aqui sozinho.'}</td></tr>`;
+                return;
+            }
+            const podeMudar = usuarioLogado && usuarioLogado.cargo !== 'OPTOMETRISTA';
+            tb.innerHTML = lista.map(p => {
+                const data = p.data ? new Date(p.data).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+                const itens = p.itens.map(i => `${Number(i.qtd || i.quantidade || 1)}x ${escHtml(i.nome || i.nome_produto || i.codigo_barras || 'item')}`).join('<br>') || '-';
+                const entrega = p.entrega === 'ENTREGA' ? `Entrega<br><small style="color:var(--text-muted)">${escHtml(p.endereco)}</small>` : 'Retirada na loja';
+                let pagto = PED_PAGTO[p.pagto] || escHtml(p.pagto) || '-';
+                if (p.pagto === 'CREDITO' && p.parcelas > 1) pagto += ` ${p.parcelas}x`;
+                if (p.pagto === 'DINHEIRO' && p.troco) pagto += `<br><small style="color:var(--text-muted)">troco p/ ${brl(p.troco)}</small>`;
+                const tel = p.tel.replace(/\D/g, '');
+                const zap = tel ? `https://wa.me/55${tel.replace(/^55(?=\d{10,11}$)/, '')}?text=${encodeURIComponent(`Olá, ${p.nome || ''}! Aqui é da Ótica Muniz. Recebemos seu pedido nº ${p.id} (${brl(p.total)}).`)}` : '';
+                const botoes = !podeMudar ? '' : {
+                    NOVO:     `<button class="btn btn-cyan btn-sm" onclick="mudarSituacaoPedido('${p.id}','PAGO')"><i class="fa-solid fa-check"></i> Pago</button>
+                               <button class="btn btn-danger btn-sm" onclick="mudarSituacaoPedido('${p.id}','CANCELADO')"><i class="fa-solid fa-xmark"></i></button>`,
+                    PAGO:     `<button class="btn btn-cyan btn-sm" onclick="mudarSituacaoPedido('${p.id}','PRONTO')"><i class="fa-solid fa-box"></i> Pronto</button>`,
+                    PRONTO:   `<button class="btn btn-cyan btn-sm" onclick="mudarSituacaoPedido('${p.id}','ENTREGUE')"><i class="fa-solid fa-handshake"></i> Entregue</button>`,
+                    ENTREGUE: '',
+                    CANCELADO:`<button class="btn btn-secondary btn-sm" onclick="mudarSituacaoPedido('${p.id}','NOVO')"><i class="fa-solid fa-rotate-left"></i> Reabrir</button>`
+                }[p.status];
+                return `<tr class="${pedIdsRecentes.has(String(p.id)) ? 'ped-novo-chegou' : ''}">
+                    <td><b>${escHtml(p.id)}</b></td>
+                    <td>${data}</td>
+                    <td class="ped-cliente">${escHtml(p.nome) || '-'}<small>${escHtml(p.tel)}</small>${zap ? `<a href="${zap}" target="_blank" rel="noopener"><i class="fa-solid fa-whatsapp"></i> Chamar</a>` : ''}${p.obs ? `<small>Obs.: ${escHtml(p.obs)}</small>` : ''}</td>
+                    <td class="ped-itens">${itens}</td>
+                    <td>${entrega}</td>
+                    <td>${pagto}</td>
+                    <td><b>${brl(p.total)}</b></td>
+                    <td><span class="ped-status ped-${p.status}">${PED_SITUACOES[p.status]}</span></td>
+                    <td><div class="ped-acoes">${botoes}</div></td>
+                </tr>`;
+            }).join('');
+            setTimeout(() => pedIdsRecentes.clear(), 2500);
+        }
+
+        async function mudarSituacaoPedido(id, situacao) {
+            const p = pedidosSite.find(x => String(x.id) === String(id)); if (!p) return;
+            if (situacao === 'CANCELADO' && !confirm(`Cancelar o pedido nº ${id}?`)) return;
+            try {
+                await sbFetch(`/rest/v1/pedidos?id=eq.${encodeURIComponent(id)}`, {
+                    method: 'PATCH',
+                    headers: { Prefer: 'return=minimal' },
+                    body: JSON.stringify({ [p.colunaStatus]: situacao })
+                });
+                p.status = situacao;
+                desenharPedidosSite();
+                logSQL(`UPDATE pedidos SET ${p.colunaStatus} = '${situacao}' WHERE id = ${id};`);
+                showToast(`Pedido nº ${id}: ${PED_SITUACOES[situacao]}.`);
+            } catch (e) {
+                console.error(e);
+                showToast(/\b(401|403|42501)\b|permission/i.test(e.message)
+                    ? 'O banco não liberou a alteração. Rode o arquivo 3-pedidos-no-painel.sql no Supabase.'
+                    : 'Não foi possível mudar a situação do pedido.', 'danger');
             }
         }
     </script>
