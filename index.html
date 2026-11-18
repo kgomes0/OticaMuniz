@@ -1373,6 +1373,7 @@
                 localStorage.setItem(CHAVE_BD_PRODUTOS, JSON.stringify(produtos));
                 localStorage.setItem(CHAVE_BD_HIST_IMPORT, JSON.stringify(historicoImportacoes));
             } catch (e) { /* armazenamento indisponível neste visualizador */ }
+            if (typeof agendarSyncSupabase === 'function') agendarSyncSupabase(); // SUPABASE: envia as mudanças para o banco online
         }
         (function carregarProdutosBD() {
             try {
@@ -1454,6 +1455,7 @@
             const user = funcionarios.find(u => u.email.toLowerCase() === email.toLowerCase() && u.senhaHash === senha);
             if (user) {
                 iniciarSessao(user);
+                if (typeof conectarSupabase === 'function') conectarSupabase(email, senha); // SUPABASE: entra também no banco online
             } else {
                 showToast('E-mail ou senha incorretos!', 'danger');
             }
@@ -1480,6 +1482,7 @@
         function executarLogout() {
             logSQL(`-- SESSÃO ENCERRADA: Usuário '${usuarioLogado ? usuarioLogado.nome : 'Anônimo'}' deslogou.`);
             usuarioLogado = null;
+            if (typeof desconectarSupabase === 'function') desconectarSupabase(); // SUPABASE: encerra a sessão no banco online
             document.getElementById('main-app').style.display = 'none';
             document.getElementById('login-screen').style.display = 'flex';
             document.getElementById('login_email').value = 'admin@oticamuniz.com';
@@ -3197,6 +3200,196 @@
         window.onload = function() {
             // Inicialização garantida na carga da página
         };
+    </script>
+    <script>
+        /* =====================================================================
+           LIGAÇÃO COM O SUPABASE (banco online compartilhado com o site da loja)
+           ---------------------------------------------------------------------
+           Como funciona, em 4 passos:
+             1. No login, o painel também entra no Supabase com o mesmo
+                e-mail e senha (o usuário precisa existir em Authentication > Users).
+             2. Logo depois, baixa os produtos do Supabase e coloca na tela.
+                Se o banco estiver vazio, envia os produtos que já estão no painel
+                (é a "migração" automática da primeira vez).
+             3. Toda vez que o painel salva produtos (cadastro, edição, exclusão,
+                importação, venda que baixa estoque), envia SÓ o que mudou.
+             4. O site da loja lê da mesma tabela, então mostra tudo na hora.
+           Se o Supabase não estiver configurado ou cair, o painel continua
+           funcionando como antes, salvando só neste computador.
+           ===================================================================== */
+        const SUPABASE = {
+            URL: 'https://jhdebubjtpocnceorctz.supabase.co',        // ex.: 'https://abcdefgh.supabase.co'   (Project Settings > API > Project URL)
+            ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoZGVidWJqdHBvY25jZW9yY3R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ4NjM3MDIsImV4cCI6MjExMDQzOTcwMn0.U3DNcG_uIRwLmQwkqo5XvlVBPtiMz9K66t10gAWCGqM'    // chave "anon public"                   (Project Settings > API)
+        };
+
+        let sbSessao = null;                 // { access_token, refresh_token } depois do login
+        let sbUltimoEnviado = new Map();     // codigo_barras -> versão (texto) que está no banco
+        let sbTimer = null, sbOcupado = false, sbPendente = false;
+
+        const sbConfigurado = () => Boolean(SUPABASE.URL && SUPABASE.ANON_KEY);
+
+        // Painel usa nomes curtos (nome, cat, venda...). O banco usa os nomes do SQL.
+        function produtoParaLinha(p) {
+            return {
+                codigo_barras: String(p.cod_barras),
+                referencia: p.referencia || null,
+                nome_produto: p.nome || '',
+                marca: p.marca || null,
+                categoria: p.cat || null,
+                subgrupo: p.subgrupo || null,
+                cor: p.cor || null,
+                tamanho: p.tamanho || null,
+                formato: p.formato || null,
+                cnpj_fornecedor: p.fornecedor || null,
+                preco_venda: Number(p.venda) || 0,
+                qtd_estoque: parseInt(p.qtd, 10) || 0,
+                arquivado: Boolean(p.arquivado),
+                data_cadastro: p.dataCadastro || null
+            };
+        }
+        function linhaParaProduto(l, anterior) {
+            return Object.assign({}, anterior || {}, {   // mantém campos extras que só existem no painel
+                cod_barras: l.codigo_barras,
+                referencia: l.referencia || '',
+                nome: l.nome_produto || '',
+                marca: l.marca || '',
+                cat: l.categoria || '',
+                subgrupo: l.subgrupo || '',
+                cor: l.cor || '',
+                tamanho: l.tamanho || '',
+                formato: l.formato || '',
+                fornecedor: l.cnpj_fornecedor || '',
+                venda: Number(l.preco_venda) || 0,
+                qtd: Number(l.qtd_estoque) || 0,
+                arquivado: Boolean(l.arquivado),
+                dataCadastro: l.data_cadastro || ''
+            });
+        }
+
+        // Chamada genérica à API do Supabase. Renova o login sozinho se ele expirar (dura ~1h).
+        async function sbFetch(caminho, opcoes = {}, podeRenovar = true) {
+            const resp = await fetch(SUPABASE.URL + caminho, Object.assign({}, opcoes, {
+                headers: Object.assign({
+                    apikey: SUPABASE.ANON_KEY,
+                    Authorization: 'Bearer ' + (sbSessao ? sbSessao.access_token : SUPABASE.ANON_KEY),
+                    'Content-Type': 'application/json'
+                }, opcoes.headers || {})
+            }));
+            if (resp.status === 401 && podeRenovar && sbSessao && sbSessao.refresh_token) {
+                const r = await fetch(SUPABASE.URL + '/auth/v1/token?grant_type=refresh_token', {
+                    method: 'POST',
+                    headers: { apikey: SUPABASE.ANON_KEY, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refresh_token: sbSessao.refresh_token })
+                });
+                if (r.ok) { sbSessao = await r.json(); return sbFetch(caminho, opcoes, false); }
+            }
+            if (!resp.ok) throw new Error('Supabase ' + resp.status + ': ' + await resp.text());
+            return resp;
+        }
+
+        async function conectarSupabase(email, senha) {
+            if (!sbConfigurado()) return;
+            try {
+                const r = await fetch(SUPABASE.URL + '/auth/v1/token?grant_type=password', {
+                    method: 'POST',
+                    headers: { apikey: SUPABASE.ANON_KEY, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email, password: senha })
+                });
+                if (!r.ok) throw new Error('login recusado (' + r.status + ')');
+                sbSessao = await r.json();
+                logSQL('-- SUPABASE: conectado como ' + email);
+                await baixarProdutosSupabase();
+            } catch (e) {
+                sbSessao = null;
+                console.error(e);
+                showToast('Banco online indisponível: salvando só neste computador.', 'warning');
+                logSQL('-- SUPABASE: falha ao conectar (' + e.message + ')');
+            }
+        }
+
+        function desconectarSupabase() {
+            if (sbSessao) sbFetch('/auth/v1/logout', { method: 'POST' }).catch(() => {});
+            sbSessao = null;
+            sbUltimoEnviado = new Map();
+            clearTimeout(sbTimer);
+        }
+
+        async function baixarProdutosSupabase() {
+            // O Supabase entrega no máximo 1000 linhas por vez, então busca em páginas.
+            let linhas = [], inicio = 0;
+            while (true) {
+                const r = await sbFetch('/rest/v1/produtos?select=*&order=codigo_barras', {
+                    headers: { Range: inicio + '-' + (inicio + 999), 'Range-Unit': 'items' }
+                });
+                const pagina = await r.json();
+                linhas = linhas.concat(pagina);
+                if (pagina.length < 1000) break;
+                inicio += 1000;
+            }
+
+            if (!linhas.length && produtos.length) {
+                // Banco vazio: primeira vez. Sobe os produtos que já estão no painel.
+                await enviarProdutosSupabase();
+                showToast(produtos.length + ' produto(s) enviados para o banco online.');
+                return;
+            }
+
+            const locais = new Map(produtos.map(p => [String(p.cod_barras), p]));
+            produtos = linhas.map(l => linhaParaProduto(l, locais.get(l.codigo_barras)));
+            sbUltimoEnviado = new Map(produtos.map(p => [String(p.cod_barras), JSON.stringify(produtoParaLinha(p))]));
+            try { localStorage.setItem(CHAVE_BD_PRODUTOS, JSON.stringify(produtos)); } catch (e) {}
+            logSQL('-- SUPABASE: ' + produtos.length + ' produto(s) carregados do banco online');
+            renderTabelasGerais();
+            if (typeof renderProdutos === 'function') renderProdutos();
+        }
+
+        async function enviarProdutosSupabase() {
+            const atuais = new Map(produtos.map(p => [String(p.cod_barras), produtoParaLinha(p)]));
+
+            // 1) Gravar (inserir ou atualizar) só os produtos que mudaram
+            const mudados = [...atuais.values()].filter(l => sbUltimoEnviado.get(l.codigo_barras) !== JSON.stringify(l));
+            for (let i = 0; i < mudados.length; i += 500) {
+                await sbFetch('/rest/v1/produtos?on_conflict=codigo_barras', {
+                    method: 'POST',
+                    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },   // = "upsert"
+                    body: JSON.stringify(mudados.slice(i, i + 500))
+                });
+            }
+
+            // 2) Apagar os que estavam no banco e foram excluídos no painel
+            const removidos = [...sbUltimoEnviado.keys()].filter(c => !atuais.has(c));
+            for (let i = 0; i < removidos.length; i += 100) {
+                const lista = removidos.slice(i, i + 100).map(c => '"' + c.replace(/"/g, '\\"') + '"').join(',');
+                await sbFetch('/rest/v1/produtos?codigo_barras=in.(' + encodeURIComponent(lista) + ')', { method: 'DELETE' });
+            }
+
+            mudados.forEach(l => sbUltimoEnviado.set(l.codigo_barras, JSON.stringify(l)));
+            removidos.forEach(c => sbUltimoEnviado.delete(c));
+            if (mudados.length || removidos.length) {
+                logSQL('-- SUPABASE: ' + mudados.length + ' gravado(s), ' + removidos.length + ' apagado(s)');
+            }
+        }
+
+        // Espera um instante antes de enviar, para juntar várias mudanças seguidas num envio só.
+        function agendarSyncSupabase() {
+            if (!sbSessao) return;
+            clearTimeout(sbTimer);
+            sbTimer = setTimeout(sincronizarSupabase, 800);
+        }
+        async function sincronizarSupabase() {
+            if (sbOcupado) { sbPendente = true; return; }
+            sbOcupado = true;
+            try {
+                await enviarProdutosSupabase();
+            } catch (e) {
+                console.error(e);
+                showToast('Não foi possível salvar no banco online. Tentaremos de novo na próxima alteração.', 'danger');
+                logSQL('-- SUPABASE: erro ao salvar (' + e.message + ')');
+            } finally {
+                sbOcupado = false;
+                if (sbPendente) { sbPendente = false; agendarSyncSupabase(); }
+            }
+        }
     </script>
 </body>
 </html>
